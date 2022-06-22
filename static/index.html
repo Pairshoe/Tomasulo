@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html style="height: 100%; width: 100%">
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+        <title>Tomasulo</title>
+    </head>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.2/css/all.css">
+    <body style="height: 100%; width: 100%; overflow: auto; margin: 0px; padding: 0px">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand text-white">TOMASULO</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav mr-auto">
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#" id='clock'></a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#" onclick="run(-1)"><i class="fas fa-angle-left fa-2x" data-toggle="tooltip" data-placement='bottom' title='Step Last'></i></a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#" onclick="run(1)"><i class="fas fa-angle-right fa-2x" data-toggle="tooltip" data-placement='bottom' title='Step Next'></i></a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#" onclick="run(2)"><i class="fas fa-step-forward fa-2x" data-toggle="tooltip" data-placement='bottom' title='Run to end'></i></a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#" onclick="reset()"><i class="fas fa-undo fa-2x" data-toggle="tooltip" data-placement='bottom' title='Reset'></i></a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+        <div class="py-4" style="height: 93%; width: 100%">
+            <div class="row" style="width: 100%">
+                <div class="col-md-5" style="width: 100%">
+                    <div id="inst-table" style="width: 100%"></div>
+                </div>
+                <div class="col-md-7 border-left" style="width: 100%">
+                    <div id="res-table" style="width: 100%"></div>
+                </div>
+            </div>
+            <hr>
+            <div id="reg-table" style="width: 100%"></div>
+            <div id="mem-table" style="width: 100%"></div>
+        </div>
+    </body>
+    <script type="text/javascript">
+        var title_rb = ['Name', 'Busy', 'Instr', 'ExecUnit', 'InstrStatus', 'Valid', 'Result', 'StoreAddress', 'BranchCmp', 'BranchPC'];
+        var title_rs = ['Name', 'Busy', 'Instr', 'Vj', 'Vk', 'Qj', 'Qk', 'ExTimeLeft', 'ReorderNum'];
+        var title_bt = ['Name', 'Valid', 'BranchPC', 'BranchPred', 'BranchTarget'];
+        var title_register = ['Valid', 'Value', 'ReorderNum'];
+        var name_rs = ['Load1', 'Load2', 'Store1', 'Store2', 'INT1', 'INT2'];
+        var done = false;
+        var tim = false;
+        function init() {
+            // reorder buffer
+            html = '';
+            html += "<table class='table table-hover table-striped'><thead><tr>";
+            for (var i = 0; i < title_rb.length; ++i)
+                html += '<th scope="col">' + title_rb[i] + '</th>';
+            html += '</tr><tbody>';
+            for (var i = 0; i < 12; ++i) {
+                html += '<tr><th scope="row">RB' + i + "</th>";
+                for (var j = 1; j < title_rb.length; ++j)
+                    html += '<th scope="row" id="RB'+ i + '-' + title_rb[j] +'"></th>';
+                html += '</tr>';
+            }
+            html += "</tbody></table>";
+            // reservation station
+            html += "<table class='table table-hover table-striped'><thead><tr>";
+            for (var i = 0; i < title_rs.length; ++i)
+                html += "<th scope='col'>" + title_rs[i] + "</th>";
+            html += "</tr><tbody>";
+            for (var i = 0; i < name_rs.length; ++i) {
+                html += '<tr><th scope="row">' + name_rs[i] + "</th>";
+                for (var j = 1; j < title_rs.length; ++j)
+                    html += '<th scope="row" id="RS' + i + '-' + title_rs[j] +'"></th>';
+                html += '</tr>';
+            }
+            html += "</tbody></table>";
+            // branch target table
+            html += "<table class='table table-hover table-striped'><thead><tr>";
+            for (var i = 0; i < title_bt.length; ++i)
+                html += '<th scope="col">' + title_bt[i] + '</th>';
+            html += '</tr><tbody>';
+            for (var i = 0; i < 8; ++i) {
+                html += '<tr><th scope="row">BT' + i + "</th>";
+                for (var j = 1; j < title_bt.length; ++j)
+                    html += '<th scope="row" id="BT' + i + '-' + title_bt[j] +'"></th>';
+                html += '</tr>';
+            }
+            html += "</tbody></table>";
+            $('#res-table').html(html);
+            // register
+            html = "<table class='table table-hover table-striped'><thead><tr><th scope='col'>Register</th>";
+            for (var i = 0; i < 32; ++i)
+                html += "<th scope='col'>R" + i + "</th>";
+            html += "</tr><tbody>";
+            for (var i = 0; i < title_register.length; ++i) {
+                html += '<tr><th scope="row">' + title_register[i] + "</th>";
+                for (var j = 0; j < 32; ++j)
+                    html += '<th scope="row" id="R'+ j + '-' + title_register[i] +'"></th>';
+                html += '</tr>';
+            }
+            html += "</tbody></table>";
+            $('#reg-table').html(html);
+            // memory
+            html = "<table class='table table-hover table-striped'><thead><tr><th scope='col'>Memory</th>";
+            for (var i = 0; i < 16; ++i)
+                html += "<th scope='col'>MEM[" + i + "]</th>";
+            html += "</tr><tbody>";
+            html += '<tr><th scope="row">Value</th>';
+            for (var i = 0; i < 16; i++)
+                html += '<th scope="row" id="MEM'+ i + '-Value"></th>';
+            html += "</tbody></table>";
+            $('#mem-table').html(html);
+            // init modal
+            $(function () {$('[data-toggle="tooltip"]').tooltip()})
+        }
+        function refresh(data) {
+            console.log(data);
+            done = data['done'];
+            code = data['code'];
+            instr = data['instr'];
+            // draw inst table
+            html = "<table class='table table-hover table-striped'><thead><tr><th scope='col'>Code</th><th scope='col'>Instr</th></tr><tbody>";
+            for (var i = 0; i < code.length; ++i) {
+                html += "<tr><th scope='row'>" + code[i] + "</th>" + "<th scope='row'>" + instr[i] + "</th></tr>";
+            }
+            html += "</tbody></table>";
+            $('#inst-table').html(html);
+            // clock
+            if (!done)
+                $('#clock').html('<i class="far fa-clock fa-2x" data-toggle="tooltip" data-placement="bottom" title="Clock"></i><span>' + data['cycle'] + '</span>');
+            else
+                $('#clock').html('<i class="far fa-times-circle fa-2x" data-toggle="tooltip" data-placement="bottom" title="Clock"></i><span>' + data['cycle'] + '</span>');
+            // reorder buffer
+            for (var i = 0; i < 12; ++i)
+                for (var j = 0; j < title_rb.length; ++j) {
+                    index = 'RB' + i + '-' + title_rb[j];
+                    $('#' + index).text(data[index] == undefined ? '' : data[index]);
+                }
+            // reservation station
+            for (var i = 0; i < name_rs.length; ++i)
+                for (var j = 0; j < title_rs.length; ++j) {
+                    index = 'RS' + i + '-' + title_rs[j];
+                    $('#' + index).text(data[index] == undefined ? '' : data[index]);
+                }
+            // branch target table
+            for (var i = 0; i < 8; ++i)
+                for (var j = 0; j < title_bt.length; ++j) {
+                    index = 'BT' + i + '-' + title_bt[j];
+                    $('#' + index).text(data[index] == undefined ? '' : data[index]);
+                }
+            // register
+            for (var i = 0; i < 32; ++i)
+                for (var j = 0; j < title_register.length; ++j) {
+                    index = 'R' + i + '-' + title_register[j];
+                    $('#' + index).text(data[index] == undefined ? '' : data[index]);
+                }
+            // memory
+            for (var i = 0; i < 16; i++) {
+                index = 'MEM' + i + '-Value';
+                $('#' + index).text(data[index] == undefined ? '' : data[index]);
+            }
+        }
+        function run(step) {
+            var query = {step: step};
+            $.post('/run', JSON.stringify(query), function(data) {
+                refresh(data);
+            }, "json");
+        }
+        function reset() {
+            $.post('/reset', null, function(data) {
+                refresh(data);
+            }, "json");
+        }
+        init();
+        reset();
+    </script>
+</html>
